@@ -11,4 +11,5 @@ add_executable(XhongWheels main.cpp
         src/log_event.h
         src/log_formatter.h
         src/timestamp.h
+        src/blockingbuffer.h
         )

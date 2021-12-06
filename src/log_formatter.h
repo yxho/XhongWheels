@@ -109,7 +109,7 @@ class LevelFormatItem : public LogFormatter::FormatItem {
   public:
     LevelFormatItem(const std::string& str = "") {}
     void format(std::ostream& os, LogLevel::Level level, LogEvent::ptr event) override {
-        os << LogLevel::ToString(level);
+        os << LogLevel::toString(level);
     }
 };
 

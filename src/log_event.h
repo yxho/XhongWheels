@@ -4,14 +4,16 @@
 
 #ifndef XHONGWHEELS_LOG_EVENT_H
 #define XHONGWHEELS_LOG_EVENT_H
+#define FMT_HEADER_ONLY
+#include "fmt/format.h"
 #include "hilog.h"
 #include "log_level.h"
 #include <memory>
 #include <sstream>
 #include <stdarg.h>
 #if defined(_WIN32)
-#include <windows.h>
-#undef ERROR
+#    include <windows.h>
+#    undef ERROR
 #endif
 namespace xhong {
 class Logger;
@@ -107,11 +109,22 @@ class LogEvent {
     void format(const char* fmt, ...);
 
     /**
-     * @brief 格式化写入日志内容
+     * @brief 现代格式化写入日志内容
      */
-    void format(const char* fmt, va_list al);
+    template <typename... Args>
+    void modernFormat(fmt::format_string<Args...> fmt, Args&&... args) {
+        fmt::basic_memory_buffer<char, 250> buf;
+        fmt::detail::vformat_to(buf, fmt::basic_string_view<char>(fmt),
+                                fmt::make_format_args(std::forward<Args>(args)...));
+        m_ss << std::string(buf.data(), buf.size());
+    }
 
   private:
+    /**
+     * @brief 格式化写入日志内容
+     */
+    void format(const char* fmt, va_list args);
+
     const char*             m_file     = nullptr;  /// 文件名
     int32_t                 m_line     = 0;        /// 行号
     uint32_t                m_elapse   = 0;        /// 程序启动开始到现在的毫秒数
@@ -143,14 +156,14 @@ void LogEvent::format(const char* fmt, ...) {
 /**
  * @brief 格式化写入日志内容
  */
-void LogEvent::format(const char* fmt, va_list al) {
+void LogEvent::format(const char* fmt, va_list args) {
     char* buf = nullptr;
 #if defined(_WIN32)
     int maxLen = 1024;
     int len;
     while (true) {
         buf = (char*)realloc(buf, maxLen);
-        len = vsnprintf(buf, maxLen, fmt, al);
+        len = vsnprintf(buf, maxLen, fmt, args);
         if (len >= 0 && len < maxLen)
             break;
         maxLen *= 2;

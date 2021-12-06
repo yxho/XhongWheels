@@ -31,6 +31,8 @@ class LogAppender {
      */
     virtual void log(LogLevel::Level level, LogEvent::ptr event) = 0;
 
+    virtual void log(LogLevel::Level level, const std::string& data, size_t len) = 0;
+
     /**
      * @brief 将日志输出目标的配置转成YAML String
      */
@@ -39,7 +41,7 @@ class LogAppender {
     /**
      * @brief 更改日志格式器
      */
-    void setFormatter(LogFormatter::ptr val);
+    void setFormatter(LogFormatter::ptr formatter);
 
     /**
      * @brief 获取日志格式器
@@ -54,7 +56,7 @@ class LogAppender {
     /**
      * @brief 设置日志级别
      */
-    void setLevel(LogLevel::Level val) { m_level = val; }
+    void setLevel(LogLevel::Level level) { m_level = level; }
 
   protected:
     LogLevel::Level   m_level        = LogLevel::DEBUG;  /// 日志级别
@@ -71,6 +73,8 @@ class StdoutLogAppender : public LogAppender {
     typedef std::shared_ptr<StdoutLogAppender> ptr;
 
     void log(LogLevel::Level level, LogEvent::ptr event) override;
+
+    void log(LogLevel::Level level, const std::string& data, size_t len) override;
     // std::string                                toYamlString() override;
 };
 
@@ -84,6 +88,8 @@ class FileLogAppender : public LogAppender {
     FileLogAppender(const std::string& filename);
 
     void log(LogLevel::Level level, LogEvent::ptr event) override;
+
+    void log(LogLevel::Level level, const std::string& data, size_t len) override;
     // std::string toYamlString() override;
 
     /**
@@ -102,9 +108,9 @@ class FileLogAppender : public LogAppender {
  *
  *=====================================================================================
  */
-void LogAppender::setFormatter(LogFormatter::ptr val) {
+void LogAppender::setFormatter(LogFormatter::ptr formatter) {
     std::lock_guard<std::mutex> lock(m_mutex);
-    m_formatter = val;
+    m_formatter = formatter;
     if (m_formatter) {
         m_hasFormatter = true;
     }
@@ -124,6 +130,14 @@ void StdoutLogAppender::log(LogLevel::Level level, LogEvent::ptr event) {
         m_formatter->format(std::cout, level, event);
     }
 }
+
+void StdoutLogAppender::log(LogLevel::Level level, const std::string& data, size_t len) {
+    if (level >= m_level) {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        std::cout << data.substr(0, len);
+    }
+}
+
 void FileLogAppender::log(LogLevel::Level level, LogEvent::ptr event) {
     if (level >= m_level) {
         uint64_t now = event->getTime();
@@ -138,6 +152,22 @@ void FileLogAppender::log(LogLevel::Level level, LogEvent::ptr event) {
         }
     }
 }
+
+void FileLogAppender::log(LogLevel::Level level, const std::string& data, size_t len) {
+    if (level >= m_level) {
+        uint64_t now = time(0);
+        if (now >= (m_lastTime + 3)) {
+            reopen();
+            m_lastTime = now;
+        }
+        std::lock_guard<std::mutex> lock(m_mutex);
+        // if(!(m_filestream << m_formatter->format(logger, level, event))) {
+        if (!(m_filestream << data.substr(0, len))) {
+            std::cout << "error" << std::endl;
+        }
+    }
+}
+
 bool FileLogAppender::reopen() {
     std::lock_guard<std::mutex> lock(m_mutex);
     if (m_filestream) {

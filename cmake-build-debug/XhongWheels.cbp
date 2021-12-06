@@ -85,6 +85,9 @@
 		<Unit filename="D:/WorkSpace/CppProjects/XhongWheels/main.cpp">
 			<Option target="XhongWheels"/>
 		</Unit>
+		<Unit filename="D:/WorkSpace/CppProjects/XhongWheels/src/blockingbuffer.h">
+			<Option target="XhongWheels"/>
+		</Unit>
 		<Unit filename="D:/WorkSpace/CppProjects/XhongWheels/src/hilog.h">
 			<Option target="XhongWheels"/>
 		</Unit>

@@ -5,10 +5,15 @@
 #ifndef XHONGWHEELS_HILOG_H
 #define XHONGWHEELS_HILOG_H
 
+#include "blockingbuffer.h"
 #include "log_appender.h"
 #include "log_level.h"
 #include "singleton.h"
 #include "timestamp.h"
+#include <condition_variable>
+#include <memory>
+#include <thread>
+#include <vector>
 
 /**
  * @brief 使用流式方式将日志级别level的日志写入到logger
@@ -18,6 +23,7 @@
     xhong::LogEventWrap(xhong::LogEvent::ptr(                                                      \
                             new xhong::LogEvent(logger, level, __FILE__, __LINE__, 0, 0, 0,        \
                                                 xhong::Timestamp::GetCurrentTimestamp(), "king"))) \
+                                                                                                   \
         .getSstream()
 
 /**
@@ -53,6 +59,7 @@
     xhong::LogEventWrap(xhong::LogEvent::ptr(                                                      \
                             new xhong::LogEvent(logger, level, __FILE__, __LINE__, 0, 0, 0,        \
                                                 xhong::Timestamp::GetCurrentTimestamp(), "king"))) \
+                                                                                                   \
         .getEvent()                                                                                \
         ->format(fmt, __VA_ARGS__)
 
@@ -87,6 +94,48 @@
     HILOG_FMT_LEVEL(logger, xhong::LogLevel::FATAL, fmt, __VA_ARGS__)
 
 /**
+ * @brief 使用现代格式化方式将日志级别level的日志写入到logger
+ */
+#define HILOG_MODERN_FMT_LEVEL(logger, level, fmt, ...)                                            \
+    if (logger->getLevel() <= level)                                                               \
+    xhong::LogEventWrap(xhong::LogEvent::ptr(                                                      \
+                            new xhong::LogEvent(logger, level, __FILE__, __LINE__, 0, 0, 0,        \
+                                                xhong::Timestamp::GetCurrentTimestamp(), "king"))) \
+                                                                                                   \
+        .getEvent()                                                                                \
+        ->modernFormat(fmt, __VA_ARGS__)
+
+/**
+ * @brief 使用格式化方式将日志级别debug的日志写入到logger
+ */
+#define HILOGD(logger, fmt, ...)                                                                   \
+    HILOG_MODERN_FMT_LEVEL(logger, xhong::LogLevel::DEBUG, fmt, __VA_ARGS__)
+
+/**
+ * @brief 使用格式化方式将日志级别info的日志写入到logger
+ */
+#define HILOGI(logger, fmt, ...)                                                                   \
+    HILOG_MODERN_FMT_LEVEL(logger, xhong::LogLevel::INFO, fmt, __VA_ARGS__)
+
+/**
+ * @brief 使用格式化方式将日志级别warn的日志写入到logger
+ */
+#define HILOGW(logger, fmt, ...)                                                                   \
+    HILOG_MODERN_FMT_LEVEL(logger, xhong::LogLevel::WARN, fmt, __VA_ARGS__)
+
+/**
+ * @brief 使用格式化方式将日志级别error的日志写入到logger
+ */
+#define HILOGE(logger, fmt, ...)                                                                   \
+    HILOG_MODERN_FMT_LEVEL(logger, xhong::LogLevel::ERROR, fmt, __VA_ARGS__)
+
+/**
+ * @brief 使用格式化方式将日志级别fatal的日志写入到logger
+ */
+#define HILOGF(logger, fmt, ...)                                                                   \
+    HILOG_MODERN_FMT_LEVEL(logger, xhong::LogLevel::FATAL, fmt, __VA_ARGS__)
+
+/**
  * @brief 获取主日志器
  */
 #define HILOG_ROOT() xhong::LoggerMgr::GetInstance()->getRoot()
@@ -110,10 +159,39 @@ class Logger : public std::enable_shared_from_this<Logger> {
      * @brief 构造函数
      * @param[in] name 日志器名称
      */
-    Logger(const std::string& name = "root") : m_name(name), m_level(LogLevel::DEBUG) {
+    Logger(const std::string& name = "root", const bool accFlag = true)
+        : m_name(name), m_level(LogLevel::DEBUG), m_accelerateFlag(accFlag),
+          m_outputBufferSize(1 << 25) {
         m_formatter.reset(new LogFormatter(
             "%d{%Y-%m-%d %H:%M:%S}%T%t%T%N%T%F%T[%p]%T%f:%l%T%m%n"));  //"%d{%Y-%m-%d
-                                                                       //%H:%M:%S}%T%t%T%N%T%F%T[%p]%T[%c]%T%f:%l%T%m%n"
+        //%H:%M:%S}%T%t%T%N%T%F%T[%p]%T[%c]%T%f:%l%T%m%n"
+        if (m_accelerateFlag) {
+            m_outputBuffer = static_cast<char*>(malloc(m_outputBufferSize));
+            m_sinkThread   = std::thread(&Logger::sinkThread, this);
+        }
+    }
+
+    ~Logger() {
+        if (m_accelerateFlag) {
+            // notify background thread befor the object detoryed.
+            std::unique_lock<std::mutex> lock(m_condMutex);
+            m_threadEndSyncFlag = true;
+            m_proceedCond.notify_all();
+            m_hitEmptyCond.wait(lock);
+        }
+
+        {
+            // stop sink thread.
+            std::lock_guard<std::mutex> lock(m_condMutex);
+            m_threadEndFlag = true;
+            m_proceedCond.notify_all();
+        }
+
+        if (m_sinkThread.joinable())
+            m_sinkThread.join();
+
+        free(m_outputBuffer);
+        // todo:只能指针数组buf释放
     }
 
     /**
@@ -193,7 +271,7 @@ class Logger : public std::enable_shared_from_this<Logger> {
     /**
      * @brief 设置日志级别
      */
-    void setLevel(LogLevel::Level val) { m_level = val; }
+    void setLevel(LogLevel::Level level) { m_level = level; }
 
     /**
      * @brief 返回日志名称
@@ -205,6 +283,72 @@ class Logger : public std::enable_shared_from_this<Logger> {
      */
     // std::string toYamlString();
 
+    void produceLog(const char* data, uint32_t size) { blockingBuffer()->produce(data, size); }
+
+    CircleBlockingBuffer::ptr blockingBuffer() {
+        static thread_local CircleBlockingBuffer::ptr stagingBuffer = nullptr;  //多线程，多buf
+        if (stagingBuffer == nullptr) {
+            std::unique_lock<std::mutex> lock(m_bufferMutex);
+            lock.unlock();
+            stagingBuffer = std::make_shared<CircleBlockingBuffer>(m_outputBufferSize);
+            lock.lock();
+            m_threadBuffersVec.push_back(stagingBuffer);
+        }
+        return stagingBuffer;
+    }
+
+    void sinkThread() {
+        while (!m_threadEndFlag) {
+            // move front-end data to internal buffer.
+            {
+                std::lock_guard<std::mutex> lock(m_bufferMutex);
+                uint32_t                    bufferIdx = 0;
+                // while (!m_threadEndFlag && !m_outputFullFlag && !m_threadBuffersVec.empty()) {
+                while (!m_threadEndFlag && !m_outputFullFlag &&
+                       (bufferIdx < m_threadBuffersVec.size())) {
+                    CircleBlockingBuffer::ptr circleBlockingBuffer = m_threadBuffersVec[bufferIdx];
+                    uint32_t                  consumableBytes = circleBlockingBuffer->getUsedSize();
+
+                    if (m_outputBufferSize - m_oneTimeConsumeBytes < consumableBytes) {
+                        m_outputFullFlag = true;
+                        break;
+                    }
+
+                    if (consumableBytes > 0) {
+                        uint32_t consumeBytes = circleBlockingBuffer->consume(
+                            m_outputBuffer + m_oneTimeConsumeBytes, consumableBytes);
+                        m_oneTimeConsumeBytes += consumeBytes;
+                    }
+                    else {
+                        m_threadBuffersVec.erase(m_threadBuffersVec.begin() + bufferIdx);
+                    }
+                    bufferIdx++;
+                }
+            }
+
+            // not data to sink, go to sleep, 50us.
+            if (m_oneTimeConsumeBytes == 0) {
+                std::unique_lock<std::mutex> lock(m_condMutex);
+
+                // if front-end generated sync operation, consume again.
+                if (m_threadEndSyncFlag) {
+                    m_threadEndSyncFlag = false;
+                    continue;
+                }
+
+                m_hitEmptyCond.notify_one();
+                m_proceedCond.wait_for(lock, std::chrono::microseconds(50));
+            }
+            else {
+                for (auto& appender : m_appenders) {
+                    appender->log(m_level, m_outputBuffer, m_oneTimeConsumeBytes);
+                }
+                m_oneTimeConsumeBytes = 0;
+                m_outputFullFlag      = false;
+            }
+        }
+    }
+
   private:
     std::string                 m_name;       /// 日志名称
     LogLevel::Level             m_level;      /// 日志级别
@@ -212,6 +356,22 @@ class Logger : public std::enable_shared_from_this<Logger> {
     std::list<LogAppender::ptr> m_appenders;  /// 日志目标集合
     LogFormatter::ptr           m_formatter;  /// 日志格式器
     Logger::ptr                 m_root;       /// 主日志器
+
+    bool m_accelerateFlag{true};
+    bool m_threadEndSyncFlag{false};  // front-back-end sync.
+    bool m_threadEndFlag{false};      // background thread exit flag.
+    bool m_outputFullFlag{false};     // output buffer full flag.
+
+    uint32_t m_oneTimeConsumeBytes{0};             // bytes of consume first-end data per loop.
+    uint32_t m_outputBufferSize{2 * 1024 * 1024};  // two buffer size.
+    char*    m_outputBuffer{nullptr};              // first internal buffer.
+
+    std::vector<CircleBlockingBuffer::ptr> m_threadBuffersVec;
+    std::thread                            m_sinkThread;
+    std::mutex                             m_bufferMutex;  // internel buffer mutex.
+    std::mutex                             m_condMutex;
+    std::condition_variable                m_proceedCond;   // for background thread to proceed.
+    std::condition_variable                m_hitEmptyCond;  // for no data to consume.
 };
 
 /**
@@ -348,8 +508,13 @@ void Logger::log(LogLevel::Level level, LogEvent::ptr event) {
         auto                        self = shared_from_this();
         std::lock_guard<std::mutex> lock(m_mutex);
         if (!m_appenders.empty()) {
-            for (auto& appender : m_appenders) {
-                appender->log(level, event);
+            if(m_accelerateFlag) {
+                std::string str = m_formatter->format(level,event);
+                produceLog(str.c_str(),str.size());
+            }else{
+                for (auto& appender : m_appenders) {
+                    appender->log(level, event);
+                }
             }
         }
         else if (m_root) {

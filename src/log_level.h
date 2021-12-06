@@ -33,15 +33,15 @@ class LogLevel {
      * @brief 将日志级别转成文本输出
      * @param[in] level 日志级别
      */
-    static const char* ToString(LogLevel::Level level);
+    static const char* toString(LogLevel::Level level);
 
     /**
      * @brief 将文本转换成日志级别
      * @param[in] str 日志级别文本
      */
-    static LogLevel::Level FromString(const std::string& str);
+    static LogLevel::Level fromString(const std::string& str);
 };
-const char* LogLevel::ToString(LogLevel::Level level) {
+const char* LogLevel::toString(LogLevel::Level level) {
     switch (level) {
 #define SHADOW(name)                                                                               \
     case LogLevel::name: return #name; break;
@@ -57,7 +57,7 @@ const char* LogLevel::ToString(LogLevel::Level level) {
     return "UNKNOW";
 }
 
-LogLevel::Level LogLevel::FromString(const std::string& str) {
+LogLevel::Level LogLevel::fromString(const std::string& str) {
 #define SHADOW(level, v)                                                                           \
     if (str == #v) {                                                                               \
         return LogLevel::level;                                                                    \
