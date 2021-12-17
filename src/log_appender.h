@@ -34,11 +34,6 @@ class LogAppender {
     virtual void log(LogLevel::Level level, const std::string& data, size_t len) = 0;
 
     /**
-     * @brief 将日志输出目标的配置转成YAML String
-     */
-    // virtual std::string toYamlString() = 0;
-
-    /**
      * @brief 更改日志格式器
      */
     void setFormatter(LogFormatter::ptr formatter);
@@ -70,12 +65,11 @@ class LogAppender {
  */
 class StdoutLogAppender : public LogAppender {
   public:
-    typedef std::shared_ptr<StdoutLogAppender> ptr;
+    using ptr =  std::shared_ptr<StdoutLogAppender>;
 
     void log(LogLevel::Level level, LogEvent::ptr event) override;
 
     void log(LogLevel::Level level, const std::string& data, size_t len) override;
-    // std::string                                toYamlString() override;
 };
 
 /**
@@ -83,9 +77,10 @@ class StdoutLogAppender : public LogAppender {
  */
 class FileLogAppender : public LogAppender {
   public:
-    typedef std::shared_ptr<FileLogAppender> ptr;
+    using ptr =  std::shared_ptr<FileLogAppender>;
 
-    FileLogAppender(const std::string& filename);
+    FileLogAppender(const std::string& filename){m_filename=filename;};
+
 
     void log(LogLevel::Level level, LogEvent::ptr event) override;
 
@@ -146,7 +141,6 @@ void FileLogAppender::log(LogLevel::Level level, LogEvent::ptr event) {
             m_lastTime = now;
         }
         std::lock_guard<std::mutex> lock(m_mutex);
-        // if(!(m_filestream << m_formatter->format(logger, level, event))) {
         if (!m_formatter->format(m_filestream, level, event)) {
             std::cout << "error" << std::endl;
         }
@@ -161,7 +155,6 @@ void FileLogAppender::log(LogLevel::Level level, const std::string& data, size_t
             m_lastTime = now;
         }
         std::lock_guard<std::mutex> lock(m_mutex);
-        // if(!(m_filestream << m_formatter->format(logger, level, event))) {
         if (!(m_filestream << data.substr(0, len))) {
             std::cout << "error" << std::endl;
         }

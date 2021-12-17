@@ -15,4 +15,5 @@ CMakeFiles/XhongWheels.dir/main.cpp.obj: ../src/log_formatter.h
 CMakeFiles/XhongWheels.dir/main.cpp.obj: ../src/log_level.h
 CMakeFiles/XhongWheels.dir/main.cpp.obj: ../src/singleton.h
 CMakeFiles/XhongWheels.dir/main.cpp.obj: ../src/timestamp.h
+CMakeFiles/XhongWheels.dir/main.cpp.obj: ../src/utils.h
 

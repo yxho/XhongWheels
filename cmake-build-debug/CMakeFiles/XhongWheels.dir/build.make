@@ -35,6 +35,9 @@
 .SUFFIXES: .hpux_make_needs_suffix_list
 
 
+# Produce verbose output by default.
+VERBOSE = 1
+
 # Command-line flag to silence nested $(MAKE).
 $(VERBOSE)MAKESILENT = -s
 
@@ -79,15 +82,15 @@ CMakeFiles/XhongWheels.dir/main.cpp.obj: CMakeFiles/XhongWheels.dir/flags.make
 CMakeFiles/XhongWheels.dir/main.cpp.obj: CMakeFiles/XhongWheels.dir/includes_CXX.rsp
 CMakeFiles/XhongWheels.dir/main.cpp.obj: ../main.cpp
 	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=D:\WorkSpace\CppProjects\XhongWheels\cmake-build-debug\CMakeFiles --progress-num=$(CMAKE_PROGRESS_1) "Building CXX object CMakeFiles/XhongWheels.dir/main.cpp.obj"
-	"D:\Program Files\mingw64\bin\g++.exe" $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -o CMakeFiles\XhongWheels.dir\main.cpp.obj -c D:\WorkSpace\CppProjects\XhongWheels\main.cpp
+	"D:\Program Files\mingw64\bin\g++.exe" $(CXX_DEFINES) -D__FILE__=\"main.cpp\" $(CXX_INCLUDES) $(CXX_FLAGS) -o CMakeFiles\XhongWheels.dir\main.cpp.obj -c D:\WorkSpace\CppProjects\XhongWheels\main.cpp
 
 CMakeFiles/XhongWheels.dir/main.cpp.i: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Preprocessing CXX source to CMakeFiles/XhongWheels.dir/main.cpp.i"
-	"D:\Program Files\mingw64\bin\g++.exe" $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E D:\WorkSpace\CppProjects\XhongWheels\main.cpp > CMakeFiles\XhongWheels.dir\main.cpp.i
+	"D:\Program Files\mingw64\bin\g++.exe" $(CXX_DEFINES) -D__FILE__=\"main.cpp\" $(CXX_INCLUDES) $(CXX_FLAGS) -E D:\WorkSpace\CppProjects\XhongWheels\main.cpp > CMakeFiles\XhongWheels.dir\main.cpp.i
 
 CMakeFiles/XhongWheels.dir/main.cpp.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Compiling CXX source to assembly CMakeFiles/XhongWheels.dir/main.cpp.s"
-	"D:\Program Files\mingw64\bin\g++.exe" $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S D:\WorkSpace\CppProjects\XhongWheels\main.cpp -o CMakeFiles\XhongWheels.dir\main.cpp.s
+	"D:\Program Files\mingw64\bin\g++.exe" $(CXX_DEFINES) -D__FILE__=\"main.cpp\" $(CXX_INCLUDES) $(CXX_FLAGS) -S D:\WorkSpace\CppProjects\XhongWheels\main.cpp -o CMakeFiles\XhongWheels.dir\main.cpp.s
 
 # Object files for target XhongWheels
 XhongWheels_OBJECTS = \

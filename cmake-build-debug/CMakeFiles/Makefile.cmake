@@ -36,6 +36,7 @@ set(CMAKE_MAKEFILE_DEPENDS
   "CMakeFiles/3.19.2/CMakeCXXCompiler.cmake"
   "CMakeFiles/3.19.2/CMakeRCCompiler.cmake"
   "CMakeFiles/3.19.2/CMakeSystem.cmake"
+  "../cmake/utils.cmake"
   )
 
 # The corresponding makefile is:

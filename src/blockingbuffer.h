@@ -8,6 +8,7 @@
 #include <atomic>
 #include <math.h>
 #include <memory>
+#include <cstring>
 
 namespace xhong {
 

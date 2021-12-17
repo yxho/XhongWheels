@@ -6,5 +6,7 @@ CXX_DEFINES =
 
 CXX_INCLUDES = @CMakeFiles/XhongWheels.dir/includes_CXX.rsp
 
-CXX_FLAGS = -g -std=gnu++14
+CXX_FLAGS =   -O3 -fPIC -ggdb -std=c++11  -pthread -Wl,--no-as-needed -Wall -Wno-deprecated -Werror -Wno-unused-function -Wno-builtin-macro-redefined -Wno-deprecated-declarations -g -std=gnu++14
+
+# Custom defines: CMakeFiles/XhongWheels.dir/main.cpp.obj_DEFINES = __FILE__="main.cpp"
 

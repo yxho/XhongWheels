@@ -5,7 +5,7 @@
 		<Option title="XhongWheels"/>
 		<Option makefile_is_custom="1"/>
 		<Option compiler="gcc"/>
-		<Option virtualFolders="CMake Files\;"/>
+		<Option virtualFolders="CMake Files\;CMake Files\cmake\;"/>
 		<Build>
 			<Target title="all">
 				<Option working_dir="D:/WorkSpace/CppProjects/XhongWheels/cmake-build-debug"/>
@@ -105,6 +105,9 @@
 		</Unit>
 		<Unit filename="D:/WorkSpace/CppProjects/XhongWheels/CMakeLists.txt">
 			<Option virtualFolder="CMake Files\"/>
+		</Unit>
+		<Unit filename="D:/WorkSpace/CppProjects/XhongWheels/cmake/utils.cmake">
+			<Option virtualFolder="CMake Files\cmake\"/>
 		</Unit>
 	</Project>
 </CodeBlocks_project_file>

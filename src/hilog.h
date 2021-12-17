@@ -10,7 +10,9 @@
 #include "log_level.h"
 #include "singleton.h"
 #include "timestamp.h"
+#include "utils.h"
 #include <condition_variable>
+#include <ctime>
 #include <memory>
 #include <thread>
 #include <vector>
@@ -20,11 +22,12 @@
  */
 #define HILOG_LEVEL(logger, level)                                                                 \
     if (logger->getLevel() <= level)                                                               \
-    xhong::LogEventWrap(xhong::LogEvent::ptr(                                                      \
-                            new xhong::LogEvent(logger, level, __FILE__, __LINE__, 0, 0, 0,        \
-                                                xhong::Timestamp::GetCurrentTimestamp(), "king"))) \
+    xhong::LogEventWrap(xhong::BasicLogEvent::ptr(new xhong::BasicLogEvent(                        \
+                            logger, level, __FILE__, __LINE__, clock(), xhong::GetThreadId(), 0,   \
+                            xhong::Timestamp::GetCurrentTimestamp(), " ")))                        \
                                                                                                    \
-        .getSstream()
+        .getBasicEvent()                                                                           \
+        ->getSstream()
 
 /**
  * @brief 使用流式方式将日志级别debug的日志写入到logger
@@ -56,11 +59,11 @@
  */
 #define HILOG_FMT_LEVEL(logger, level, fmt, ...)                                                   \
     if (logger->getLevel() <= level)                                                               \
-    xhong::LogEventWrap(xhong::LogEvent::ptr(                                                      \
-                            new xhong::LogEvent(logger, level, __FILE__, __LINE__, 0, 0, 0,        \
-                                                xhong::Timestamp::GetCurrentTimestamp(), "king"))) \
+    xhong::LogEventWrap(xhong::BasicLogEvent::ptr(new xhong::BasicLogEvent(                        \
+                            logger, level, __FILE__, __LINE__, clock(), xhong::GetThreadId(), 0,   \
+                            xhong::Timestamp::GetCurrentTimestamp(), " ")))                        \
                                                                                                    \
-        .getEvent()                                                                                \
+        .getBasicEvent()                                                                           \
         ->format(fmt, __VA_ARGS__)
 
 /**
@@ -98,11 +101,11 @@
  */
 #define HILOG_MODERN_FMT_LEVEL(logger, level, fmt, ...)                                            \
     if (logger->getLevel() <= level)                                                               \
-    xhong::LogEventWrap(xhong::LogEvent::ptr(                                                      \
-                            new xhong::LogEvent(logger, level, __FILE__, __LINE__, 0, 0, 0,        \
-                                                xhong::Timestamp::GetCurrentTimestamp(), "king"))) \
+    xhong::LogEventWrap(xhong::FmtLogEvent::ptr(new xhong::FmtLogEvent(                            \
+                            logger, level, __FILE__, __LINE__, clock(), xhong::GetThreadId(), 0,   \
+                            xhong::Timestamp::GetCurrentTimestamp(), " ")))                        \
                                                                                                    \
-        .getEvent()                                                                                \
+        .getFmtEvent()                                                                             \
         ->modernFormat(fmt, __VA_ARGS__)
 
 /**
@@ -138,12 +141,12 @@
 /**
  * @brief 获取主日志器
  */
-#define HILOG_ROOT() xhong::LoggerMgr::GetInstance()->getRoot()
+#define HILOG_ROOT() xhong::Singleton<xhong::LoggerManager>::GetInstance()->getRoot()
 
 /**
  * @brief 获取name的日志器
  */
-#define HILOG_NAME(name) xhong::LoggerMgr::GetInstance()->getLogger(name)
+#define HILOG_NAME(name) xhong::Singleton<xhong::LoggerManager>::GetInstance()->getLogger(name)
 
 namespace xhong {
 /**
@@ -162,9 +165,10 @@ class Logger : public std::enable_shared_from_this<Logger> {
     Logger(const std::string& name = "root", const bool accFlag = true)
         : m_name(name), m_level(LogLevel::DEBUG), m_accelerateFlag(accFlag),
           m_outputBufferSize(1 << 25) {
-        m_formatter.reset(new LogFormatter(
-            "%d{%Y-%m-%d %H:%M:%S}%T%t%T%N%T%F%T[%p]%T%f:%l%T%m%n"));  //"%d{%Y-%m-%d
+        m_formatter.reset(
+            new LogFormatter("%d{%Y-%m-%d %H:%M:%S}%T%t%T[%p]%T%f:%l%T%m%n"));  //"%d{%Y-%m-%d
         //%H:%M:%S}%T%t%T%N%T%F%T[%p]%T[%c]%T%f:%l%T%m%n"
+        // linit
         if (m_accelerateFlag) {
             m_outputBuffer = static_cast<char*>(malloc(m_outputBufferSize));
             m_sinkThread   = std::thread(&Logger::sinkThread, this);
@@ -278,11 +282,6 @@ class Logger : public std::enable_shared_from_this<Logger> {
      */
     const std::string& getName() const { return m_name; }
 
-    /**
-     * @brief 将日志器的配置转成YAML String
-     */
-    // std::string toYamlString();
-
     void produceLog(const char* data, uint32_t size) { blockingBuffer()->produce(data, size); }
 
     CircleBlockingBuffer::ptr blockingBuffer() {
@@ -299,11 +298,9 @@ class Logger : public std::enable_shared_from_this<Logger> {
 
     void sinkThread() {
         while (!m_threadEndFlag) {
-            // move front-end data to internal buffer.
             {
                 std::lock_guard<std::mutex> lock(m_bufferMutex);
                 uint32_t                    bufferIdx = 0;
-                // while (!m_threadEndFlag && !m_outputFullFlag && !m_threadBuffersVec.empty()) {
                 while (!m_threadEndFlag && !m_outputFullFlag &&
                        (bufferIdx < m_threadBuffersVec.size())) {
                     CircleBlockingBuffer::ptr circleBlockingBuffer = m_threadBuffersVec[bufferIdx];
@@ -318,9 +315,10 @@ class Logger : public std::enable_shared_from_this<Logger> {
                         uint32_t consumeBytes = circleBlockingBuffer->consume(
                             m_outputBuffer + m_oneTimeConsumeBytes, consumableBytes);
                         m_oneTimeConsumeBytes += consumeBytes;
+
                     }
                     else {
-                        m_threadBuffersVec.erase(m_threadBuffersVec.begin() + bufferIdx);
+
                     }
                     bufferIdx++;
                 }
@@ -400,18 +398,11 @@ class LoggerManager {
      */
     Logger::ptr getRoot() const { return m_root; }
 
-    /**
-     * @brief 将所有的日志器配置转成YAML String
-     */
-    // std::string toYamlString();
   private:
     std::mutex                         m_mutex;    /// Mutex
     std::map<std::string, Logger::ptr> m_loggers;  /// 日志器容器
     Logger::ptr                        m_root;     /// 主日志器
 };
-
-/// 日志器管理类单例模式
-typedef xhong::Singleton<LoggerManager> LoggerMgr;
 
 /**
  * @brief 日志事件包装器
@@ -422,35 +413,49 @@ class LogEventWrap {
      * @brief 构造函数
      * @param[in] e 日志事件
      */
-    LogEventWrap(LogEvent::ptr event) : m_event(event) {}
+    LogEventWrap(BasicLogEvent::ptr event) : m_basicEvent(event) {}
+    /**
+     * @brief 构造函数
+     * @param[in] e 日志事件
+     */
+    LogEventWrap(FmtLogEvent::ptr event) : m_fmtEvent(event) {}
 
     /**
      * @brief 析构函数
      */
-    ~LogEventWrap() { m_event->getLogger()->log(m_event->getLevel(), m_event); }
+    ~LogEventWrap() {
+        if (m_basicEvent) {
+            m_basicEvent->getLogger()->log(m_basicEvent->getLevel(), m_basicEvent);
+        }
+        if (m_fmtEvent) {
+            m_fmtEvent->getLogger()->log(m_fmtEvent->getLevel(), m_fmtEvent);
+        }
+    }
 
     /**
      * @brief 获取日志事件
      */
-    LogEvent::ptr getEvent() const { return m_event; }
-
+    BasicLogEvent::ptr getBasicEvent() const { return m_basicEvent; }
     /**
-     * @brief 获取日志内容流
+     * @brief 获取日志事件
      */
-    std::stringstream& getSstream() { return m_event->getSstream(); }
+    FmtLogEvent::ptr getFmtEvent() const { return m_fmtEvent; }
 
   private:
     /**
      * @brief 日志事件
      */
-    LogEvent::ptr m_event;
+    BasicLogEvent::ptr m_basicEvent{nullptr};
+    /**
+     * @brief 日志事件
+     */
+    FmtLogEvent::ptr m_fmtEvent{nullptr};
 };
+
 /**
  * =============================================================================
  * =============================================================================
- * =============================================================================
  */
-
 void Logger::setFormatter(LogFormatter::ptr formatter) {
     std::lock_guard<std::mutex> lock(m_mutex);
     m_formatter = formatter;
@@ -471,7 +476,6 @@ void Logger::setFormatter(const std::string& pattern) {
                   << " invalid formatter" << std::endl;
         return;
     }
-    // m_formatter = new_val;
     setFormatter(newformatter);
 }
 
@@ -508,10 +512,11 @@ void Logger::log(LogLevel::Level level, LogEvent::ptr event) {
         auto                        self = shared_from_this();
         std::lock_guard<std::mutex> lock(m_mutex);
         if (!m_appenders.empty()) {
-            if(m_accelerateFlag) {
-                std::string str = m_formatter->format(level,event);
-                produceLog(str.c_str(),str.size());
-            }else{
+            if (m_accelerateFlag) {
+                std::string str = m_formatter->format(level, event);
+                produceLog(str.c_str(), str.size());
+            }
+            else {
                 for (auto& appender : m_appenders) {
                     appender->log(level, event);
                 }
@@ -526,7 +531,6 @@ void Logger::log(LogLevel::Level level, LogEvent::ptr event) {
 LoggerManager::LoggerManager() {
     m_root.reset(new Logger);
     m_root->addAppender(LogAppender::ptr(new StdoutLogAppender));
-
     m_loggers[m_root->m_name] = m_root;
 
     init();

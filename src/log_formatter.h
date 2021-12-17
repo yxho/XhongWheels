@@ -4,9 +4,11 @@
 
 #ifndef XHONGWHEELS_LOG_FORMATTER_H
 #define XHONGWHEELS_LOG_FORMATTER_H
+#define FMT_HEADER_ONLY
 #include "log_event.h"
 #include "log_level.h"
 #include "timestamp.h"
+#include <cstdlib>
 #include <functional>
 #include <iostream>
 #include <list>
@@ -121,17 +123,6 @@ class ElapseFormatItem : public LogFormatter::FormatItem {
     }
 };
 
-// class NameFormatItem : public LogFormatter::FormatItem {
-//   public:
-//     NameFormatItem(const std::string& str = "") {}
-//     void format(std::ostream&   os,
-//
-//                 LogLevel::Level level,
-//                 LogEvent::ptr   event) override {
-//         os << event->getLogger()->getName();
-//     }
-// };
-
 class ThreadIdFormatItem : public LogFormatter::FormatItem {
   public:
     ThreadIdFormatItem(const std::string& str = "") {}
@@ -165,7 +156,7 @@ class DateTimeFormatItem : public LogFormatter::FormatItem {
     }
 
     void format(std::ostream& os, LogLevel::Level level, LogEvent::ptr event) override {
-        auto buf = xhong::Timestamp::GetTimestampObj(event->getTime()).AccurateFormat();
+        auto buf = xhong::Timestamp::TimestampAccFmtToStr(event->getTime());
         os << buf;
     }
 
@@ -220,22 +211,19 @@ class TabFormatItem : public LogFormatter::FormatItem {
 };
 
 /**
- *
- *
+ * =============================================================================
+ * =============================================================================
  */
-
 std::string LogFormatter::format(LogLevel::Level level, LogEvent::ptr event) {
     std::stringstream ss;
+
     for (auto& i : m_formatters) {
         i->format(ss, level, event);
     }
     return ss.str();
 }
 
-std::ostream& LogFormatter::format(std::ostream& ofs,
-
-                                   LogLevel::Level level,
-                                   LogEvent::ptr   event) {
+std::ostream& LogFormatter::format(std::ostream& ofs, LogLevel::Level level, LogEvent::ptr event) {
     for (auto& i : m_formatters) {
         i->format(ofs, level, event);
     }
@@ -260,7 +248,7 @@ void LogFormatter::init() {
             }
         }
 
-        size_t n          = i + 1;
+        size_t n         = i + 1;
         int    fmtStatus = 0;
         size_t fmtBegin  = 0;
 

@@ -24,10 +24,12 @@ class Timestamp {
     Timestamp() : m_timestamp(0) {}
     Timestamp(uint64_t timestamp) : m_timestamp(timestamp) {}
 
-    static uint64_t  GetCurrentTimestamp();
-    static Timestamp GetCurrentTimestampObj();
-    static Timestamp GetTimestampObj(uint64_t timestamp);
-    static Timestamp ParseFmtToTimestampObj(const std::string& fmt);
+    static uint64_t    GetCurrentTimestamp();
+    static Timestamp   GetCurrentTimestampObj();
+    static Timestamp   GetTimestampObj(uint64_t timestamp);
+    static Timestamp   ParseFmtToTimestampObj(const std::string& fmt);
+    static std::string TimestampFmtToStr(uint64_t time, const std::string& fmt);
+    static std::string TimestampAccFmtToStr(uint64_t time, const std::string& fmt);
 
     uint64_t    GetTimestamp() const { return m_timestamp; }
     int         GetYear() const { return ToTm().tm_year + 1900; }
@@ -46,8 +48,8 @@ class Timestamp {
     static const uint32_t m_uSecPerSec = 1000 * 1000;
 };
 /**
- * =================================================================================================
- *
+ * =============================================================================
+ * =============================================================================
  */
 // Timestamp of current timestamp.
 uint64_t Timestamp::GetCurrentTimestamp() {
@@ -56,7 +58,7 @@ uint64_t Timestamp::GetCurrentTimestamp() {
     // use gettimeofday(2) is 15% faster then std::chrono in linux.
     struct timeval tv;
     gettimeofday(&tv, NULL);
-    timestamp = tv.tv_sec * kUSecPerSec + tv.tv_usec;
+    timestamp = tv.tv_sec * m_uSecPerSec + tv.tv_usec;
 #else
     timestamp = std::chrono::duration_cast<std::chrono::microseconds>(
                     std::chrono::system_clock().now().time_since_epoch())
@@ -89,6 +91,37 @@ Timestamp Timestamp::ParseFmtToTimestampObj(const std::string& fmt) {
     return Timestamp(t);
 }
 
+std::string Timestamp::TimestampFmtToStr(uint64_t           time,
+                                         const std::string& format = "%Y-%m-%d-%H:%M:%S") {
+    static thread_local time_t sec = 0;
+    static thread_local char   datetime[32];  // 2019-08-16-15:32:25
+    time_t                     nowSec = time / m_uSecPerSec;
+    if (sec != nowSec) {
+        sec = nowSec;
+        struct tm tm;
+        localtime_r(&sec, &tm);
+        strftime(datetime, sizeof(datetime), format.c_str(), &tm);
+    }
+    return datetime;
+}
+
+std::string Timestamp::TimestampAccFmtToStr(uint64_t           time,
+                                            const std::string& format = "%Y-%m-%d-%H:%M:%S") {
+    static thread_local uint64_t lastTime = 0;
+    static thread_local char     buf[64];
+    if (lastTime == time) {
+        return buf;
+    }
+    lastTime          = time;
+    auto     datetime = TimestampFmtToStr(time);
+    uint32_t micro    = static_cast<uint32_t>(time % m_uSecPerSec);
+    uint32_t ms       = static_cast<uint32_t>(micro / 1000);
+    uint32_t us       = static_cast<uint32_t>(micro % 1000);
+    snprintf(buf, sizeof(buf), "%s.%03u.%03u", datetime.c_str(), ms, us);
+
+    return buf;
+}
+
 // Format time with default fmt.
 // e.g. 2020-07-09-14:48:36.458074
 std::string Timestamp::Format(const std::string& format = "%Y-%m-%d-%H:%M:%S") const {
@@ -106,12 +139,19 @@ std::string Timestamp::Format(const std::string& format = "%Y-%m-%d-%H:%M:%S") c
 }
 
 std::string Timestamp::AccurateFormat(const std::string& format = "%Y-%m-%d-%H:%M:%S") const {
-    auto     datetime = Format(format);
-    char     buf[64];
+    static thread_local uint64_t lastTime = 0;
+    static thread_local char     buf[64];
+    if (lastTime == m_timestamp) {
+        return buf;
+    }
+    lastTime      = m_timestamp;
+    auto datetime = Format(format);
+
     uint32_t micro = static_cast<uint32_t>(m_timestamp % m_uSecPerSec);
     uint32_t ms    = static_cast<uint32_t>(micro / 1000);
     uint32_t us    = static_cast<uint32_t>(micro % 1000);
     snprintf(buf, sizeof(buf), "%s.%03u.%03u", datetime.c_str(), ms, us);
+
     return buf;
 }
 
